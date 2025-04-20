@@ -23,6 +23,7 @@ defmodule NorthwindElixirTraders.MixProject do
   defp deps do
     [
       {:ecto_sqlite3, "~> 0.19.0"},
+      {:tzdata, "~> 1.1"}
     ]
   end
 end
