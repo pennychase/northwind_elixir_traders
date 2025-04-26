@@ -2,3 +2,4 @@ import Ecto.Query
 
 alias NorthwindElixirTraders.Repo
 alias NorthwindElixirTraders.Category
+alias NorthwindElixirTraders.Employee
