@@ -6,7 +6,7 @@ Snippets for creating tables:
 |> Product.changeset(%{name: "Mace of Molag Bal", unit: "1 piece", price: 1280, category_id: 1})
 |> Repo.insert()
 
-%Products{}
+%Product{}
 |> Product.changeset(%{name: "Auriel's Bow", unit: "1 piece", price: 999.90, category_id: 1})
 |> Repo.insert()
 
