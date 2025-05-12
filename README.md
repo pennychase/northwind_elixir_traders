@@ -10,6 +10,10 @@ Snippets for creating tables:
 |> Product.changeset(%{name: "Auriel's Bow", unit: "1 piece", price: 999.90, category_id: 1})
 |> Repo.insert()
 
+%Product{}
+|> Product.changeset(%{name: "BFG-899", unit: "1 piece", price: 99.99, category_id: 1})
+|> Repo.insert()
+
 %Category{}
 |> Category.changeset(%{name: "Overkill Instruments"})
 |> Repo.insert()
@@ -28,4 +32,12 @@ Snippets for creating tables:
 
 %Supplier{}
 |> Supplier.changeset(%{name: "Hakkinen Spice Industries LLC"})
+|> Repo.insert()
+
+%Supplier{}
+|> Supplier.changeset(%{name: "Acme Inc."})
+|> Repo.insert()
+
+%Supplier{}
+|> Supplier.changeset(%{name: "Wumpus Archery Supplies Co."})
 |> Repo.insert()
