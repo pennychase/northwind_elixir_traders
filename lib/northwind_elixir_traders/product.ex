@@ -11,6 +11,7 @@ defmodule NorthwindElixirTraders.Product do
     field(:price, :float)
     field(:category_id, :integer)
     belongs_to(:supplier, Supplier)
+    belongs_to(:category, Category, define_field: false)
 
     timestamps(type: :utc_datetime)
   end
