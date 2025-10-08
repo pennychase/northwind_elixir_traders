@@ -2,5 +2,6 @@ import Ecto.Query
 
 alias NorthwindElixirTraders.Category
 alias NorthwindElixirTraders.Repo
+alias NorthwindElixirTraders.Employee
 
 IEx.configure(inspect: [charlists: :as_lists])
