@@ -2,6 +2,8 @@ defmodule NorthwindElixirTraders.Supplier do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias NorthwindElixirTraders.Product
+
   @name_mxlen 50
 
   schema "suppliers" do
@@ -12,6 +14,7 @@ defmodule NorthwindElixirTraders.Supplier do
     field(:postal_code, :string)
     field(:country, :string)
     field(:phone, :string)
+    has_many(:products, Product)
 
     timestamps(type: :utc_datetime)
   end
