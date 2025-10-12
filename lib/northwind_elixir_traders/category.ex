@@ -2,12 +2,15 @@ defmodule NorthwindElixirTraders.Category do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias NorthwindElixirTraders.Product
+
   @name_mxlen 50
   @desc_mxlen 100 
 
   schema "categories" do
     field(:name, :string)
     field(:description, :string)
+    has_many(:products, Product)
 
     timestamps(type: :utc_datetime)
   end
