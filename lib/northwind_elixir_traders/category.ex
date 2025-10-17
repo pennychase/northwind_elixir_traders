@@ -16,8 +16,8 @@ defmodule NorthwindElixirTraders.Category do
   end
 
   def changeset(data, params \\ %{}) do
-    permitted = [:name, :description]
-    required = [:name]
+    permitted = [:id, :name, :description]
+    required = permitted
 
     data
     |> cast(params, permitted)
@@ -25,6 +25,7 @@ defmodule NorthwindElixirTraders.Category do
     |> validate_length(:name, max: @name_mxlen)
     |> validate_length(:description, max: @desc_mxlen)
     |> unique_constraint([:name])
+    |> unique_constraint([:id])
   end
 
 end
