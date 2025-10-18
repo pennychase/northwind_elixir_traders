@@ -3,7 +3,7 @@ defmodule NorthwindElixirTraders.DataImporter do
   alias NorthwindElixirTraders.Repo
 
   @name :nt 
-  @database "NorthwindTraders-original.db"
+  @database ((System.get_env("SQLITE_DB") || "") <> "NorthwindTraders-original.db")
 
   # Start the original Northwind Traders database
   def start() do
