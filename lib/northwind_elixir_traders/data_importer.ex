@@ -3,7 +3,7 @@ defmodule NorthwindElixirTraders.DataImporter do
   alias NorthwindElixirTraders.Repo
 
   @name :nt 
-  @database ((System.get_env("SQLITE_DB") || "") <> "NorthwindTraders-original.db")
+  @database ((System.get_env("SQLITE_DB_HOME") || "") <> "NorthwindTraders-original.db")
 
   # Start the original Northwind Traders database
   def start() do
@@ -171,7 +171,7 @@ defmodule NorthwindElixirTraders.DataImporter do
     get_application()
     |> :application.get_key(:modules)
     |> elem(1)
-    |> Enum.map(&Module.split(&1) |> tl())
+    |> Enum.map(&(Module.split(&1) |> tl))
     |> List.flatten()
   end
 
