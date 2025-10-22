@@ -243,4 +243,22 @@ defmodule NorthwindElixirTraders.DataImporter do
     |> Enum.map(&elem(&1,0))
   end
 
+  # Functions to analyze imports
+
+  def tally() do
+    prioritize()
+    |> Enum.map(&({&1, Repo.aggregate(&1, :count)}))
+    |> Map.new
+  end
+
+  def get_unique_errors(records) do
+    records
+    |> List.flatten 
+    |> Enum.filter(&(elem(&1, 0) != :ok)) 
+    |> Enum.map(&elem(&1, 1)) 
+    |> Enum.map(&Map.get(&1, :errors)) 
+    |> Enum.map(fn [{k, {msg, _}}] -> {k, msg} end) |> Enum.uniq
+  end
+
+
 end
