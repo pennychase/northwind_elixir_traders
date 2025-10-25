@@ -3,7 +3,7 @@ defmodule NorthwindElixirTraders.Repo.Migrations.CreateProducts do
 
   def change do
     create table(:products) do
-      add :name, :string, nill: false
+      add :name, :string, null: false
       add :unit, :string
       add :price, :numeric, precision: 7, scale: 2, default: 0.0
 
