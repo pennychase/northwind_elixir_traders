@@ -1,4 +1,5 @@
 defmodule NorthwindElixirTraders.PhoneNumbers do
+  alias NorthwindElixirTraders.{Repo, Country}
 
   @intl_regex ~r/^\+((?:9[679]|8[035789]|6[789]|5[90]|42|3[578]|2[1-689])|9[0-58]|8[1246]|6[0-6]|5[1-8]|4[\
 013-9]|3[0-469]|2[70]|7|1)(?:\W*\d){0,13}\d$/
@@ -40,6 +41,20 @@ defmodule NorthwindElixirTraders.PhoneNumbers do
     |> Enum.filter(fn r -> "" not in r and nil not in r end)
     |> Enum.map(&List.to_tuple(&1))
     |> Enum.map(fn {country, dial, iso} -> {country, String.replace(dial, "-", ""), iso} end)
+  end
+
+  def csv_tuple_to_record({_name, _dial, _alpha3} = country) do
+    [:name, :dial, :alpha3]
+    |> Enum.zip(Tuple.to_list(country))
+    |> Map.new()
+    |> then(&Country.changeset(%Country{}, &1))
+    |> Repo.insert()
+  end
+
+  def import() do
+    get_csv_rows()
+    |> process_csv()
+    |> Enum.map(&csv_tuple_to_record/1)
   end
 
 end
