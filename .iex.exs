@@ -1,4 +1,5 @@
 import Ecto.Query
+import Ecto.Changeset
 
 alias NorthwindElixirTraders.Category
 alias NorthwindElixirTraders.Repo

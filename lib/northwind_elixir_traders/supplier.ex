@@ -2,7 +2,7 @@ defmodule NorthwindElixirTraders.Supplier do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias NorthwindElixirTraders.Product
+  alias NorthwindElixirTraders.{Product, PhoneNumbers}
 
   @name_mxlen 50
 
@@ -21,14 +21,15 @@ defmodule NorthwindElixirTraders.Supplier do
 
   def changeset(data, params \\ %{}) do
     permitted = [:id, :name, :contact_name, :address, :city, :postal_code, :country, :phone]
-    required = [:name]
+    required = permitted |> List.delete(:id)
 
     data
     |> cast(params, permitted)
     |> validate_required(required)
     |> validate_length(:name, max: @name_mxlen)
+    |> PhoneNumbers.validate_phone(:phone, :country)
     |> unique_constraint([:name])
     |> unique_constraint([:id])
   end
-  
+
 end
