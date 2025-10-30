@@ -243,6 +243,19 @@ defmodule NorthwindElixirTraders.DataImporter do
     |> Enum.map(&elem(&1,0))
   end
 
+  # Reset database
+
+  def teardown() do
+    prioritize()
+    |> Enum.reverse()
+    |> Enum.map(&Repo.delete_all/1)
+  end
+
+  def reset() do
+    teardown()
+    import_all_modeled()
+  end
+
   # Functions to analyze imports
 
   def tally() do
