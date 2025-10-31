@@ -10,6 +10,7 @@ alias NorthwindElixirTraders.DataImporter
 alias NorthwindElixirTraders.Shipper
 alias NorthwindElixirTraders.PhoneNumbers
 alias NorthwindElixirTraders.Country
+alias NorthwindElixirTraders.Customer
 
 IEx.configure(inspect: [charlists: :as_lists])
 

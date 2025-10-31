@@ -1,4 +1,4 @@
-defmodule NorthwindElixirTraders.Customers do
+defmodule NorthwindElixirTraders.Customer do
 
   use Ecto.Schema
   import Ecto.Changeset
@@ -21,7 +21,7 @@ defmodule NorthwindElixirTraders.Customers do
 
   def changeset(data, params \\ %{}) do
     permitted = [:id, :name, :contact_name, :address, :city, :postal_code, :country]
-    required = permitted |> List.delete(:id)
+    required = permitted -- [:id, :postal_code]
 
     data
     |> cast(params, permitted)
@@ -30,5 +30,5 @@ defmodule NorthwindElixirTraders.Customers do
     |> unique_constraint([:name])
     |> unique_constraint([:id])
   end
-  
+
 end
