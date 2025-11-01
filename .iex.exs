@@ -1,6 +1,7 @@
 import Ecto.Query
 import Ecto.Changeset
 
+alias DialyxirVendored.Warnings.NoReturn
 alias NorthwindElixirTraders.Category
 alias NorthwindElixirTraders.Repo
 alias NorthwindElixirTraders.Employee
@@ -11,6 +12,7 @@ alias NorthwindElixirTraders.Shipper
 alias NorthwindElixirTraders.PhoneNumbers
 alias NorthwindElixirTraders.Country
 alias NorthwindElixirTraders.Customer
+alias NorthwindElixirTraders.Order
 
 IEx.configure(inspect: [charlists: :as_lists])
 
