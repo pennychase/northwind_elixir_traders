@@ -32,6 +32,8 @@ defmodule NorthwindElixirTraders.Country do
     |> unique_constraint([:name])
   end
 
+  # Utility functions for getting country codes
+
   def get_dial_by(field, value) when is_atom(field) and is_bitstring(value) do
     criterion = Keyword.new([{field, value}])
     Repo.one(from(c in __MODULE__, where: ^criterion, select: c.dial))
@@ -47,5 +49,7 @@ defmodule NorthwindElixirTraders.Country do
       [_a, _b] -> nil # ambiguous
     end
   end
+
+
 
 end

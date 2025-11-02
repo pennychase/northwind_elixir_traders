@@ -8,55 +8,6 @@ defmodule NorthwindElixirTraders.PhoneNumbers do
 
   @nanp_regex ~r/^\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})$/
 
-  # Country codes are at https://raw.githubusercontent.com/datasets/country-codes/master/data/country-codes.csv
-  # We're using a specific commit for stability
-  @url "https://raw.githubusercontent.com/datasets/country-codes/2ed03b6993e817845c504ce9626d519376c8acaa/data/country-codes.csv"
-
-  # Retrieve Country Codes and import into Country schema
-
-  def get_csv_rows() do
-    {status, result} = :httpc.request(@url)
-
-    case {status, result} do
-      {:ok, {_status, _headers, body}} ->
-        {:ok, body |> List.to_string() |> String.trim() |> String.split("\n")
-                   |> Enum.map(&fix_csv_row/1) |> Enum.map(&String.split(&1, ","))
-        }
-      {:error, {status, _, _}} -> {:error, status}
-    end
-  end
-
-  def fix_csv_row(row) when is_bitstring(row) do
-    regex = ~r/"([^"]*)"/
-
-    String.replace(row, regex, &(String.replace(&1, ",", "|") |> String.replace("\"", "")))
-  end
-
-  def process_csv({:ok, [headings | data]}) do
-    indices = ["CLDR display name", "Dial", "ISO3166-1-Alpha-3"]
-      |> Enum.map(fn colname -> Enum.find_index(headings, &(&1 == colname)) end)
-
-    data
-    |> Enum.map(fn row -> Enum.map(indices, &Enum.at(row, &1)) end)
-    |> Enum.filter(fn r -> "" not in r and nil not in r end)
-    |> Enum.map(&List.to_tuple(&1))
-    |> Enum.map(fn {country, dial, iso} -> {country, String.replace(dial, "-", ""), iso} end)
-  end
-
-  def csv_tuple_to_record({_name, _dial, _alpha3} = country) do
-    [:name, :dial, :alpha3]
-    |> Enum.zip(Tuple.to_list(country))
-    |> Map.new()
-    |> then(&Country.changeset(%Country{}, &1))
-    |> Repo.insert()
-  end
-
-  def import() do
-    get_csv_rows()
-    |> process_csv()
-    |> Enum.map(&csv_tuple_to_record/1)
-  end
-
   # Helper functions for phone number validation
 
   def is_intl?(phone) when is_bitstring(phone), do: Regex.match?(@intl_regex, phone)
@@ -126,6 +77,57 @@ defmodule NorthwindElixirTraders.PhoneNumbers do
     else
       put_change(changeset, phone_field, phone_new)
     end
+  end
+
+  # Import country codes
+
+  # Country codes are at https://raw.githubusercontent.com/datasets/country-codes/master/data/country-codes.csv
+  # We're using a specific commit for stability
+  @url "https://raw.githubusercontent.com/datasets/country-codes/2ed03b6993e817845c504ce9626d519376c8acaa/data/country-codes.csv"
+
+  # Retrieve Country Codes and import into Country schema
+
+  def get_csv_rows() do
+    {status, result} = :httpc.request(@url)
+
+    case {status, result} do
+      {:ok, {_status, _headers, body}} ->
+        {:ok, body |> List.to_string() |> String.trim() |> String.split("\n")
+                   |> Enum.map(&fix_csv_row/1) |> Enum.map(&String.split(&1, ","))
+        }
+      {:error, {status, _, _}} -> {:error, status}
+    end
+  end
+
+  def fix_csv_row(row) when is_bitstring(row) do
+    regex = ~r/"([^"]*)"/
+
+    String.replace(row, regex, &(String.replace(&1, ",", "|") |> String.replace("\"", "")))
+  end
+
+  def process_csv({:ok, [headings | data]}) do
+    indices = ["CLDR display name", "Dial", "ISO3166-1-Alpha-3"]
+      |> Enum.map(fn colname -> Enum.find_index(headings, &(&1 == colname)) end)
+
+    data
+    |> Enum.map(fn row -> Enum.map(indices, &Enum.at(row, &1)) end)
+    |> Enum.filter(fn r -> "" not in r and nil not in r end)
+    |> Enum.map(&List.to_tuple(&1))
+    |> Enum.map(fn {country, dial, iso} -> {country, String.replace(dial, "-", ""), iso} end)
+  end
+
+  def csv_tuple_to_record({_name, _dial, _alpha3} = country) do
+    [:name, :dial, :alpha3]
+    |> Enum.zip(Tuple.to_list(country))
+    |> Map.new()
+    |> then(&Country.changeset(%Country{}, &1))
+    |> Repo.insert()
+  end
+
+  def import() do
+    get_csv_rows()
+    |> process_csv()
+    |> Enum.map(&csv_tuple_to_record/1)
   end
 
 end
