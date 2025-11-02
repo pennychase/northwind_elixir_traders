@@ -3,8 +3,7 @@ defmodule NorthwindElixirTraders.Customer do
   use Ecto.Schema
   import Ecto.Changeset
 
-  #alias NorthwindElixirTraders.Order
-  alias NorthwindElixirTraders.Validations
+  alias NorthwindElixirTraders.{Order, Validations}
 
   @name_mxlen 50
 
@@ -15,7 +14,7 @@ defmodule NorthwindElixirTraders.Customer do
     field(:city, :string)
     field(:postal_code, :string)
     field(:country, :string)
-    # has_many(:orders, Order)
+    has_many(:orders, Order)
 
     timestamps(type: :utc_datetime)
   end
@@ -28,7 +27,7 @@ defmodule NorthwindElixirTraders.Customer do
     |> cast(params, permitted)
     |> validate_required(required)
     |> validate_length(:name, max: @name_mxlen)
-    |> Validations.country(:country)
+    |> Validations.validate_country(:country)
     |> unique_constraint([:name])
     |> unique_constraint([:id])
   end
