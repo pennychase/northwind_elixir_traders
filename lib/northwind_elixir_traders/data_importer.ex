@@ -1,6 +1,6 @@
 defmodule NorthwindElixirTraders.DataImporter do
   require Logger
-  alias NorthwindElixirTraders.{Repo, PhoneNumbers}
+  alias NorthwindElixirTraders.{Repo, Country}
 
   @name :nt 
   @database ((System.get_env("SQLITE_DB_HOME") || "") <> "NorthwindTraders-original.db")
@@ -194,7 +194,7 @@ defmodule NorthwindElixirTraders.DataImporter do
   # end
 
   def import_all_modeled() do
-    PhoneNumbers.import()
+    Country.import()
 
     prioritize()
     |> Enum.map(&model_to_table/1)
