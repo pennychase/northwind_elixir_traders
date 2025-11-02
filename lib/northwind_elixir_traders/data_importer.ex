@@ -194,11 +194,13 @@ defmodule NorthwindElixirTraders.DataImporter do
   # end
 
   def import_all_modeled() do
-    Country.import()
-
-    prioritize()
-    |> Enum.map(&model_to_table/1)
-    |> Enum.map(&insert_all_from/1)
+    loglevel = Logger.level()
+    Logger.configure(level: :none)
+    results = Country.import()
+    results = [results | prioritize() |> Enum.map(&model_to_table/1) |> Enum.map(&insert_all_from/1)]
+    check = check_all_imported_ok()
+    Logger.configure(level: loglevel)
+    {check, results}
   end
 
   # Determine order in which tables should be loaded
@@ -250,7 +252,8 @@ defmodule NorthwindElixirTraders.DataImporter do
   def teardown() do
     prioritize()
     |> Enum.reverse()
-    |> Enum.map(&Repo.delete_all/1)
+    |> Enum.map(&{&1, Repo.delete_all(&1) |> elem(0)})
+    |> Map.new()
   end
 
   def reset() do
@@ -273,6 +276,30 @@ defmodule NorthwindElixirTraders.DataImporter do
     |> Enum.map(&elem(&1, 1)) 
     |> Enum.map(&Map.get(&1, :errors)) 
     |> Enum.map(fn [{k, {msg, _}}] -> {k, msg} end) |> Enum.uniq
+  end
+
+  # Count the rows in the new database (Northwind Elixir Traders)
+  def count_net(m) when is_atom(m), do: Repo.aggregate(m,:count)
+
+  # Count the rows in the original database (Northwind Traders)
+  def count_nt(table) when is_bitstring(table) do
+    with {:ok, result} <- nt_query("SELECT * FROM #{table}") do
+      Map.get(result, :num_rows)
+    end
+  end
+
+  # Combine counts from both databases
+  def count_all_both() do
+    get_tables_to_import()
+    |> Stream.map(fn t -> {t, table_to_internals(t) |> Map.get(:module_name)} end)
+    |> Stream.map(fn {t, m} -> {t, count_nt(t), count_net(m)} end) |> Enum.to_list()
+  end
+
+  # Check importing all data succeeded
+  def check_all_imported_ok() do
+    count_all_both() 
+    |> Enum.reduce(0, fn {_t, a, b}, acc -> acc + a - b end)
+    |> then(&if(&1 == 0, do: :ok, else: :warning))
   end
 
 
