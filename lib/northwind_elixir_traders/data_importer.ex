@@ -3,7 +3,7 @@ defmodule NorthwindElixirTraders.DataImporter do
   alias NorthwindElixirTraders.{Repo, Country}
 
   @name :nt 
-  @database ((System.get_env("SQLITE_DB_HOME") || "") <> "NorthwindTraders-original.db")
+  @database ((System.get_env("SQLITE_DB_DIR") || "") <> "NorthwindTraders-original.db")
 
   # Start the original Northwind Traders database
   def start() do
@@ -11,7 +11,7 @@ defmodule NorthwindElixirTraders.DataImporter do
       do: Repo.start_link(name: @name, database: @database)
   end
   
-  # Query the oroiinal Northwinds Traders database, ensuring that 
+  # Query the original Northwinds Traders database, ensuring that 
   # it's the active database. and then making our Repo the active database
   def switch(name) when name in [@name, Repo] do
     try do
@@ -158,26 +158,11 @@ defmodule NorthwindElixirTraders.DataImporter do
 
   # Import data from tables that have been modeled, but not yet imported
 
-  def get_application() do
-    __MODULE__ 
-    |> Module.split() 
-    |> hd() 
-    |> List.wrap() 
-    |> Module.concat()
-    |> Application.get_application()
-  end
-
-  def get_modules() do
-    get_application()
-    |> :application.get_key(:modules)
-    |> elem(1)
-    |> Enum.map(&(Module.split(&1) |> tl))
-    |> List.flatten()
-  end
-
   def get_tables_to_import() do
     plurals = 
-      get_modules()
+      NorthwindElixirTraders.get_own_modules()
+      |> Enum.map(&(Module.split(&1) |> tl))
+      |> List.flatten()
       |> Enum.map(&pluralize/1)
 
     table_names()
@@ -186,12 +171,6 @@ defmodule NorthwindElixirTraders.DataImporter do
       |> MapSet.intersection(MapSet.new(plurals)) 
       |> MapSet.to_list()
   end
-
-  # Naive approach to importing tables into Repo
-  # def import_all_modeled() do
-  #   get_tables_to_import()
-  #   |> Enum.map(&insert_all_from/1)
-  # end
 
   def import_all_modeled() do
     loglevel = Logger.level()
