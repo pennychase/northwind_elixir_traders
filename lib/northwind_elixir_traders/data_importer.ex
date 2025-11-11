@@ -183,6 +183,64 @@ defmodule NorthwindElixirTraders.DataImporter do
   end
 
   # Determine order in which tables should be loaded
+  # Perform a topological sort using DFS
+
+  def prioritize() do
+    edges = make_erd_graph()
+    unvisited = (Map.keys(edges) ++ Map.values(edges)) |> Enum.uniq() |> Enum.shuffle()
+    sorted = []
+
+    results =
+      unvisited
+      |> Enum.reduce_while({sorted, unvisited}, fn n, acc ->
+        if Enum.empty?(unvisited) do
+          {:halt, acc}
+        else
+          {sorted, unvisited } = acc
+          {:cont, visit(n, edges, sorted, unvisited)}
+        end
+      end)
+
+    elem(results, 0)
+  end
+
+  def make_erd_graph() do
+    make_dependency_map()
+    |> Enum.filter(&(!Enum.empty?(elem(&1, 1))))
+    |> Enum.map(fn {k, vv} -> Enum.map(vv, fn v -> {v, k} end) end)
+    |> List.flatten()
+    |> Enum.map(fn {k, v} -> {fk_to_module(k), v} end)
+    |> Map.new()
+  end
+
+  # Visit a node and and its dependencies, adding it to the sorted list.
+  # unvisited is used to track the nodes that have already been visited
+  def visit(n, edges, sorted, unvisited) do
+    if n not in unvisited do
+      {sorted, unvisited}
+    else
+      m = Map.get(edges, n)
+      unvisited = List.delete(unvisited, n)   # mark n as visited
+      {sorted, unvisited} =     # visit m noly if it exists
+        if is_nil(m), do: {sorted, unvisited}, else: visit(m, edges, sorted, unvisited)
+
+      {[n | sorted], unvisited}
+    end
+  end
+
+  def fk_to_module(foreign_key) when is_atom(foreign_key) do
+    app = 
+      NorthwindElixirTraders.get_application() 
+      |> Map.get(:string)
+
+    module_name =
+      foreign_key
+      |> Atom.to_string()
+      |> String.replace("_id", "")
+      |> String.capitalize()
+
+    Module.concat(app, module_name)
+  end
 
   def get_modules_of_modeled_tables() do
     get_tables_to_import() 
@@ -203,27 +261,10 @@ defmodule NorthwindElixirTraders.DataImporter do
     |> Map.new()
   end
 
-  def gather(erd) when is_map(erd) do
-    erd 
-    |> Enum.map(fn {k, vl} -> 
-      {k, Enum.map(vl, fn vv -> 
-        {vv, Map.get(erd, vv)} end) 
-      |> Map.new()} end) 
-    |> Map.new()
-  end
-
   def model_to_table(model) when is_atom(model) do
     model|> Module.split()
     |> List.last()
     |> pluralize()
-  end
-
-  def prioritize() do
-    make_dependency_map()
-    |> gather()
-    |> Enum.map(fn {k, v} -> {k, List.flatten([Map.values(v) | Map.keys(v)])} end)
-    |> Enum.sort_by(fn {_, dependencies} -> length(dependencies) end)
-    |> Enum.map(&elem(&1,0))
   end
 
   # Reset database
