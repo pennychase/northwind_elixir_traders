@@ -13,7 +13,7 @@ defmodule NorthwindElixirTraders.Product do
     field(:category_id, :integer)
     belongs_to(:category, Category, define_field: false)  # option allows us to define the foreign key manually
     belongs_to(:supplier, Supplier)
-    # has_many(:order_details, OrderDetail)
+    has_many(:order_details, OrderDetail)
     many_to_many(:orders, Order, join_through: OrderDetail)
 
     timestamps(type: :utc_datetime)

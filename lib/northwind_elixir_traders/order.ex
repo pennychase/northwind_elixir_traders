@@ -9,7 +9,7 @@ defmodule NorthwindElixirTraders.Order do
     belongs_to(:customer, Customer)
     belongs_to(:employee, Employee)
     belongs_to(:shipper, Shipper)
-    # has_many(:order_details, OrderDetail)
+    has_many(:order_details, OrderDetail)
     many_to_many(:products, Product, join_through: OrderDetail)
 
     timestamps(type: :utc_datetime)
