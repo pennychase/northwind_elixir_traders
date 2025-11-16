@@ -99,6 +99,7 @@ defmodule NorthwindElixirTraders.DataImporter do
           r.rows
           |> Enum.map(&Enum.zip(cols, &1))
           |> Enum.map(&Map.new/1)
+          |> Enum.map(&treat_price/1)
         res = if must_treat_dates?, do: Enum.map(res, &treat_dates/1), else: res
 
         {:ok, res}
@@ -130,6 +131,11 @@ defmodule NorthwindElixirTraders.DataImporter do
     end
   end
 
+  # Handle prices by converting to cents when we're not starting from a blank slate
+  def treat_price(m) when is_map(m) do
+    if :price in Map.keys(m), do: %{m | price: round(m.price * 100)}, else: m
+  end
+
   # Insert all the rows from a given table. Repo.insert_all/2 fails because timestamps are 
   # not automatically created (since it's designed toinsert data in bulk at high effciency)
 
@@ -149,7 +155,7 @@ defmodule NorthwindElixirTraders.DataImporter do
     
     %{module_name: modname, empty_struct: estruct} = table_to_internals(table)
     {:ok, data} = select_all(table)
-    changeset = fn m -> apply(modname, :changeset, [estruct, m]) end
+    changeset = fn m -> apply(modname, :import_changeset, [estruct, m]) end
 
     data
     |> Enum.map(&changeset.(&1))

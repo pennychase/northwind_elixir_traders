@@ -43,8 +43,10 @@ defmodule NorthwindElixirTraders.Insights do
 
     Task.async_stream(orders, &calculate_order_value/1, ordered: false, timeout: @timeout, max_concurreny: mc)
     |> Enum.to_list()
-    |> Enum.reduce(0.0, fn {_status, value}, acc -> acc + value end)
+    |> Enum.sum_by(&elem(&1, 1))
   end
+
+  def dollarize(cents) when is_number(cents), do: cents / 100
 
   # Benchmarking parallelism
   # Run in IEx (compute time per # processor and times relative to one processor):
@@ -59,4 +61,7 @@ defmodule NorthwindElixirTraders.Insights do
     |> elem(0)
     |> Kernel./(reps)
   end
+
+
+
 end
