@@ -48,6 +48,7 @@ defmodule NorthwindElixirTraders.Insights do
 
   # Benchmarking parallelism
   # Run in IEx (compute time per # processor and times relative to one processor):
+  # orders = Repo.all(Order)
   # x = 1..(2*System.schedulers_online()) |> Enum.map(&{&1, Insights.parallel_benchmark(&1, 1000, orders)})
   # x_rel = Enum.map(x, fn {mc, t} -> {mc, t / Enum.max(Keyword.values(x)) |> Float.round(3)} end)
 
