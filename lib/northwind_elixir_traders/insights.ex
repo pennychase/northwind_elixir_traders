@@ -1,7 +1,7 @@
 defmodule NorthwindElixirTraders.Insights do
   import Ecto.Query
   alias NorthwindElixirTraders.Insights
-  alias NorthwindElixirTraders.{Repo, Product, Order, OrderDetail}
+  alias NorthwindElixirTraders.{Repo, Product, Order, OrderDetail, Customer}
 
   @max_concurrency System.schedulers_online()
   @timeout 10_000
@@ -44,6 +44,46 @@ defmodule NorthwindElixirTraders.Insights do
     Task.async_stream(orders, &calculate_order_value/1, ordered: false, timeout: @timeout, max_concurreny: mc)
     |> Enum.to_list()
     |> Enum.sum_by(&elem(&1, 1))
+  end
+
+  def list_top_n_customers_by_order_count(n \\ 5) when is_integer(n) do
+    Customer
+    |> join(:inner, [c], o in assoc(c, :orders)) |> group_by([c, o], c.id)
+    |> select([c, o], %{id: c.id, name: c.name, num_orders: count(o.id)})
+    |> order_by([c, o], desc: count(o.id))
+    |> limit(^n)
+    |> Repo.all
+  end
+
+  def query_orders_by_customer(%Customer{id: customer_id}),
+    do: query_orders_by_customer(customer_id)
+
+  def query_orders_by_customer(customer_id) when not is_map(customer_id) do
+    from(o in Order, join: c in Customer, on: o.customer_id == c.id,
+      where: o.customer_id == ^customer_id, select: o)
+  end
+
+  def query_top_n_customers_by_order_revenue (n \\ 5) do
+    from(s in subquery(query_customers_by_order_revenue()),
+      order_by: [desc: s.revenue], limit: ^n)
+  end
+
+  def calculate_top_n_customers_by_order_value(n \\ 5) do
+    from(s in subquery(query_top_n_customers_by_order_revenue(n)),
+      select: sum(s.revenue)) |> Repo.one()
+  end
+
+  def list_customers_by_order_revenue do
+    from(s in subquery(query_customers_by_order_revenue()),
+      order_by: [desc: s.revenue]) |> Repo.all()
+  end
+
+  def query_customers_by_order_revenue do
+    from(c in Customer,
+      join: o in assoc(c, :orders),
+      join: od in assoc(o, :order_details),
+      join: p in assoc(od, :product),
+      group_by: c.id, select: %{id: c.id, name: c.name, revenue: sum(od.quantity * p.price)})
   end
 
   def dollarize(cents) when is_number(cents), do: cents / 100

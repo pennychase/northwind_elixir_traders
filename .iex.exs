@@ -1,9 +1,9 @@
 import Ecto.Query
 import Ecto.Changeset
 
-alias DialyxirVendored.Warnings.NoReturn
-alias NorthwindElixirTraders.Category
 alias NorthwindElixirTraders.Repo
+alias NorthwindElixirTraders.Validations
+alias NorthwindElixirTraders.Category
 alias NorthwindElixirTraders.Employee
 alias NorthwindElixirTraders.Supplier
 alias NorthwindElixirTraders.Product
