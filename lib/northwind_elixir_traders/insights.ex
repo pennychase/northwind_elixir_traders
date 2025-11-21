@@ -63,19 +63,29 @@ defmodule NorthwindElixirTraders.Insights do
       where: o.customer_id == ^customer_id, select: o)
   end
 
-  def query_top_n_customers_by_order_revenue (n \\ 5) do
+  def query_top_n_customers_by_order_revenue(n \\ 5) do
     from(s in subquery(query_customers_by_order_revenue()),
       order_by: [desc: s.revenue], limit: ^n)
   end
 
-  def calculate_top_n_customers_by_order_value(n \\ 5) do
-    from(s in subquery(query_top_n_customers_by_order_revenue(n)),
-      select: sum(s.revenue)) |> Repo.one()
+  def calculate_top_n_customers_by_order_value(n \\ 5)
+        when is_integer(n) and n >= 0 do
+    if n == 0 do
+      0.0
+    else 
+      from(s in subquery(query_top_n_customers_by_order_revenue(n)),
+        select: sum(s.revenue)) |> Repo.one()
+    end
   end
 
   def list_customers_by_order_revenue do
     from(s in subquery(query_customers_by_order_revenue()),
       order_by: [desc: s.revenue]) |> Repo.all()
+  end
+
+  def count_customers_with_revenues do
+    from(s in subquery(query_customers_by_order_revenue()),
+      where: s.revenue > 0, select: count(s.id)) |> Repo.one()
   end
 
   def query_customers_by_order_revenue do
@@ -84,6 +94,54 @@ defmodule NorthwindElixirTraders.Insights do
       join: od in assoc(o, :order_details),
       join: p in assoc(od, :product),
       group_by: c.id, select: %{id: c.id, name: c.name, revenue: sum(od.quantity * p.price)})
+  end
+
+  def count_customers_orders(condition \\ :with)
+      when condition in [:with, :without] do
+    count_with =
+      from(c in Customer)
+      |> join(:inner, [c], o in assoc(c, :orders))
+      |> select([c], c.id)
+      |> distinct(true)
+      |> Repo.aggregate(:count)
+
+    case condition do
+      :with -> count_with
+      :without -> Repo.aggregate(Customer, :count) - count_with
+    end    
+  end
+
+  # Use to create data to plot share of customers vs share of revenue
+  # Call as: 
+  #   Insights.generate_customer_share_of_revenues_xy 
+  #   |> Enum.each(fn {n, r} -> IO.puts("#{n}\t#{r}") end)
+  # Copy and paste tab-separated result into Excel and create a scatter plot
+  def generate_customer_share_of_revenues_xy do
+    nc = count_customers_orders(:with)
+    total = 
+      Order
+      |> Repo.all()
+      |> calculate_total_value_of_orders()
+
+    Task.async_stream(0..nc,
+      &{&1 / nc, calculate_top_n_customers_by_order_value(&1) / total})
+    |> Enum.to_list()
+    |> Enum.map(&elem(&1, 1))
+  end
+
+  def calculate_chunk_area({{x1, y1}, {x2, y2}}) do
+    {w, h} = {x2 - x1, y2 - y1}
+    w * h * 0.5 + y1 * w
+  end
+
+  def compute_gini() do
+    data = generate_customer_share_of_revenues_xy()
+    area =
+      data 
+      |> Enum.zip(tl(data))
+      |> Enum.reduce(0.0, fn c, acc -> acc + calculate_chunk_area(c) end)
+      |> Kernel.-(0.5)
+    2 * area
   end
 
   def dollarize(cents) when is_number(cents), do: cents / 100
