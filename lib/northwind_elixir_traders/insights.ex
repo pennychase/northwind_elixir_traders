@@ -1,7 +1,7 @@
 defmodule NorthwindElixirTraders.Insights do
   import Ecto.Query
   alias NorthwindElixirTraders.Insights
-  alias NorthwindElixirTraders.{Repo, Product, Order, OrderDetail, Customer}
+  alias NorthwindElixirTraders.{Repo, Product, Order, OrderDetail, Customer, Employee, Shipper}
 
   @max_concurrency System.schedulers_online()
   @timeout 10_000
@@ -96,20 +96,17 @@ defmodule NorthwindElixirTraders.Insights do
       group_by: c.id, select: %{id: c.id, name: c.name, revenue: sum(od.quantity * p.price)})
   end
 
-  def count_customers_orders(condition \\ :with)
-      when condition in [:with, :without] do
-    count_with =
-      from(c in Customer)
-      |> join(:inner, [c], o in assoc(c, :orders))
-      |> select([c], c.id)
-      |> distinct(true)
-      |> Repo.aggregate(:count)
+  def count_customers_orders(condition \\ :with), do: count_entity_orders(Customer, condition)
 
-    case condition do
-      :with -> count_with
-      :without -> Repo.aggregate(Customer, :count) - count_with
-    end    
+  def normalize_xy(xyl) when is_list(xyl) do
+    {mxn, mxr} = 
+      xyl |> Enum.reduce({0, 0}, fn {n, r}, {mxn, mxr} -> {max(n, mxn), max(r, mxr)} end)
+
+    xyl
+    |> Enum.map(fn {n, r} -> {n / mxn, r / mxr} end)
   end
+
+  def extract_task_results(r) when is_list(r), do: Enum.map(r, &elem(&1, 1))
 
   # Use to create data to plot share of customers vs share of revenue
   # Call as: 
@@ -117,16 +114,11 @@ defmodule NorthwindElixirTraders.Insights do
   #   |> Enum.each(fn {n, r} -> IO.puts("#{n}\t#{r}") end)
   # Copy and paste tab-separated result into Excel and create a scatter plot
   def generate_customer_share_of_revenues_xy do
-    nc = count_customers_orders(:with)
-    total = 
-      Order
-      |> Repo.all()
-      |> calculate_total_value_of_orders()
-
-    Task.async_stream(0..nc,
-      &{&1 / nc, calculate_top_n_customers_by_order_value(&1) / total})
+    0 .. count_customers_orders(:with)
+    |> Task.async_stream(&{&1, calculate_top_n_customers_by_order_value(&1)})
     |> Enum.to_list()
-    |> Enum.map(&elem(&1, 1))
+    |> extract_task_results()
+    |> normalize_xy()
   end
 
   def calculate_chunk_area({{x1, y1}, {x2, y2}}) do
@@ -142,6 +134,31 @@ defmodule NorthwindElixirTraders.Insights do
       |> Enum.reduce(0.0, fn c, acc -> acc + calculate_chunk_area(c) end)
       |> Kernel.-(0.5)
     2 * area
+  end
+
+  # Generalize analyses to all entities
+
+  def count_entity_orders(m, condition \\ :with)
+      when m in [Customer, Employee, Shipper] and condition in [:with, :without] do
+    count_with =
+      from(x in m)
+      |> join(:inner, [x], o in assoc(x, :orders))
+      |> select([x], x.id)
+      |> distinct(true)
+      |> Repo.aggregate(:count)
+
+    case condition do
+      :with -> count_with
+      :without -> Repo.aggregate(m, :count) - count_with
+    end      
+  end
+
+  def query_entity_by_order_revenue(m) do
+    from(x in m,
+      join: o in assoc(x, :orders),
+      join: od in assoc(o, :order_details),
+      join: p in assoc(od, :product),
+      group_by: x.id, select: %{id: x.id, name: x.name, revenue: sum(od.quantity * p.price)})
   end
 
   def dollarize(cents) when is_number(cents), do: cents / 100
