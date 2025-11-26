@@ -1,7 +1,10 @@
 defmodule NorthwindElixirTraders.Insights do
   import Ecto.Query
   alias NorthwindElixirTraders.Insights
-  alias NorthwindElixirTraders.{Repo, Product, Order, OrderDetail, Customer, Employee, Shipper}
+  alias NorthwindElixirTraders.{Repo, Product, Order, OrderDetail, Customer, Employee, Shipper, Supplier, Category}
+
+  @tables [Customer, Employee, Shipper, Category, Supplier, Product, OrderDetail, Order]
+  @m_tables @tables -- [Order, OrderDetail]
 
   @max_concurrency System.schedulers_online()
   @timeout 10_000
@@ -139,7 +142,7 @@ defmodule NorthwindElixirTraders.Insights do
   # Generalize analyses to all entities
 
   def count_entity_orders(m, condition \\ :with)
-      when m in [Customer, Employee, Shipper] and condition in [:with, :without] do
+      when m in @m_tables and condition in [:with, :without] do
     count_with =
       from(x in m)
       |> join(:inner, [x], o in assoc(x, :orders))
