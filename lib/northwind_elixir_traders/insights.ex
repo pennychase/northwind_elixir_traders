@@ -1,6 +1,5 @@
 defmodule NorthwindElixirTraders.Insights do
   import Ecto.Query
-  alias NorthwindElixirTraders.Insights
   alias NorthwindElixirTraders.{Repo, Product, Order, OrderDetail, Customer, Employee, Shipper, Supplier, Category}
 
   @tables [Customer, Employee, Shipper, Category, Supplier, Product, OrderDetail, Order]
@@ -91,13 +90,7 @@ defmodule NorthwindElixirTraders.Insights do
       where: s.revenue > 0, select: count(s.id)) |> Repo.one()
   end
 
-  def query_customers_by_order_revenue do
-    from(c in Customer,
-      join: o in assoc(c, :orders),
-      join: od in assoc(o, :order_details),
-      join: p in assoc(od, :product),
-      group_by: c.id, select: %{id: c.id, name: c.name, revenue: sum(od.quantity * p.price)})
-  end
+  def query_customers_by_order_revenue, do: query_entity_by_order_revenue(Customer)
 
   def count_customers_orders(condition \\ :with), do: count_entity_orders(Customer, condition)
 
@@ -111,33 +104,17 @@ defmodule NorthwindElixirTraders.Insights do
 
   def extract_task_results(r) when is_list(r), do: Enum.map(r, &elem(&1, 1))
 
-  # Use to create data to plot share of customers vs share of revenue
-  # Call as: 
+  # Can use to plot share of customers vs share of revenue:
   #   Insights.generate_customer_share_of_revenues_xy 
   #   |> Enum.each(fn {n, r} -> IO.puts("#{n}\t#{r}") end)
   # Copy and paste tab-separated result into Excel and create a scatter plot
-  def generate_customer_share_of_revenues_xy do
-    0 .. count_customers_orders(:with)
-    |> Task.async_stream(&{&1, calculate_top_n_customers_by_order_value(&1)})
-    |> Enum.to_list()
-    |> extract_task_results()
-    |> normalize_xy()
-  end
-
-  def calculate_chunk_area({{x1, y1}, {x2, y2}}) do
-    {w, h} = {x2 - x1, y2 - y1}
-    w * h * 0.5 + y1 * w
-  end
-
-  def compute_gini() do
-    data = generate_customer_share_of_revenues_xy()
-    area =
-      data 
-      |> Enum.zip(tl(data))
-      |> Enum.reduce(0.0, fn c, acc -> acc + calculate_chunk_area(c) end)
-      |> Kernel.-(0.5)
-    2 * area
-  end
+  def generate_customer_share_of_revenues_xy, do: generate_entity_share_of_revenues_xy(Customer)
+  #   0 .. count_customers_orders(:with)
+  #   |> Task.async_stream(&{&1, calculate_top_n_customers_by_order_value(&1)})
+  #   |> Enum.to_list()
+  #   |> extract_task_results()
+  #   |> normalize_xy()
+  # end
 
   # Generalize analyses to all entities
 
@@ -212,6 +189,11 @@ defmodule NorthwindElixirTraders.Insights do
     |> normalize_xy()
   end
 
+  def calculate_chunk_area({{x1, y1}, {x2, y2}}) do
+    {w, h} = {x2 - x1, y2 - y1}
+    w * h * 0.5 + y1 * w
+  end
+
   def calculate_gini_coeff(xyl) when is_list(xyl) do
     xyl
     |> then(&Enum.zip(&1, tl(&1)))
@@ -236,7 +218,7 @@ defmodule NorthwindElixirTraders.Insights do
 
   def parallel_benchmark(mc, reps, orders) do
     :timer.tc(fn -> 
-      Enum.map(1..1000, fn _ -> Insights.calculate_total_value_of_orders(orders, max_concurrency: mc) end)
+      Enum.map(1..1000, fn _ -> calculate_total_value_of_orders(orders, max_concurrency: mc) end)
     end)
     |> elem(0)
     |> Kernel./(reps)
