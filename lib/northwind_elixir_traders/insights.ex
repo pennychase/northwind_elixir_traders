@@ -8,6 +8,8 @@ defmodule NorthwindElixirTraders.Insights do
   @max_concurrency System.schedulers_online()
   @timeout 10_000
 
+  # Queries and calculations for Order
+
   def query_order_details_by_order(order_id) do
     OrderDetail
     |> join(:inner, [od], p in Product, on: od.product_id == p.id)
@@ -47,6 +49,8 @@ defmodule NorthwindElixirTraders.Insights do
     |> Enum.to_list()
     |> Enum.sum_by(&elem(&1, 1))
   end
+
+  # Queries and calculations for Customer
 
   def list_top_n_customers_by_order_count(n \\ 5) when is_integer(n) do
     Customer
@@ -94,29 +98,13 @@ defmodule NorthwindElixirTraders.Insights do
 
   def count_customers_orders(condition \\ :with), do: count_entity_orders(Customer, condition)
 
-  def normalize_xy(xyl) when is_list(xyl) do
-    {mxn, mxr} = 
-      xyl |> Enum.reduce({0, 0}, fn {n, r}, {mxn, mxr} -> {max(n, mxn), max(r, mxr)} end)
-
-    xyl
-    |> Enum.map(fn {n, r} -> {n / mxn, r / mxr} end)
-  end
-
-  def extract_task_results(r) when is_list(r), do: Enum.map(r, &elem(&1, 1))
-
   # Can use to plot share of customers vs share of revenue:
   #   Insights.generate_customer_share_of_revenues_xy 
   #   |> Enum.each(fn {n, r} -> IO.puts("#{n}\t#{r}") end)
   # Copy and paste tab-separated result into Excel and create a scatter plot
   def generate_customer_share_of_revenues_xy, do: generate_entity_share_of_revenues_xy(Customer)
-  #   0 .. count_customers_orders(:with)
-  #   |> Task.async_stream(&{&1, calculate_top_n_customers_by_order_value(&1)})
-  #   |> Enum.to_list()
-  #   |> extract_task_results()
-  #   |> normalize_xy()
-  # end
 
-  # Generalize analyses to all entities
+  # Generalized queries and calculations for all modules
 
   def count_entity_orders(m, condition \\ :with)
       when m in @m_tables and condition in [:with, :without] do
@@ -181,6 +169,14 @@ defmodule NorthwindElixirTraders.Insights do
         order_by: [desc: s.revenue], limit: ^n)
   end
 
+  # Gini Coefficient
+
+  def gini(m) when m in @m_tables do
+    m
+    |> generate_entity_share_of_revenues_xy()
+    |> calculate_gini_coeff()
+  end
+
   def generate_entity_share_of_revenues_xy(m) when m in @m_tables do
     0 .. count_entity_orders(m, :with)
     |> Task.async_stream(&{&1, calculate_top_n_entity_by_order_value(m, &1)})
@@ -189,10 +185,15 @@ defmodule NorthwindElixirTraders.Insights do
     |> normalize_xy()
   end
 
-  def calculate_chunk_area({{x1, y1}, {x2, y2}}) do
-    {w, h} = {x2 - x1, y2 - y1}
-    w * h * 0.5 + y1 * w
+  def normalize_xy(xyl) when is_list(xyl) do
+    {mxn, mxr} = 
+      xyl |> Enum.reduce({0, 0}, fn {n, r}, {mxn, mxr} -> {max(n, mxn), max(r, mxr)} end)
+
+    xyl
+    |> Enum.map(fn {n, r} -> {n / mxn, r / mxr} end)
   end
+
+  def extract_task_results(r) when is_list(r), do: Enum.map(r, &elem(&1, 1))
 
   def calculate_gini_coeff(xyl) when is_list(xyl) do
     xyl
@@ -202,11 +203,47 @@ defmodule NorthwindElixirTraders.Insights do
     |> Kernel.*(2)
   end
 
-  def gini(m) when m in @m_tables do
-    m
-    |> generate_entity_share_of_revenues_xy()
-    |> calculate_gini_coeff()
+  def calculate_chunk_area({{x1, y1}, {x2, y2}}) do
+    {w, h} = {x2 - x1, y2 - y1}
+    w * h * 0.5 + y1 * w
   end
+
+  # Calculate share of revenues of the vital few and trivial many (default to 80/20 rule)
+
+  def calculate_relative_revenue_share_of_entity_rows(m) do
+    data =  from(s in subquery(query_entity_by_order_revenue(m)),
+              order_by: [desc: s.revenue])
+            |> Repo.all()
+    total = Enum.sum_by(data, & &1.revenue)
+
+    Enum.map(data, fn %{revenue: r} = x ->
+      %{id: x.id, name: x.name, share: r / total} end)
+  end
+
+  def revenue_share_total_trivial_many(m, q \\ 0.8) do
+    calculate_relative_revenue_share_of_entity_rows(m)
+    |> Enum.reverse()
+    |> helper_vital_trivial(m, q)
+  end
+
+  def revenue_share_total_vital_few(m, q \\ 0.2) do
+    calculate_relative_revenue_share_of_entity_rows(m)
+    |> helper_vital_trivial(m, q)
+  end
+
+  def helper_vital_trivial(data, m, q)
+      when is_list(data) and m in @m_tables and is_number(q) and q >0 and q <= 1 do
+    n =
+      m
+      |> count_entity_orders(:with)
+      |> Kernel.*(q)
+      |> round()
+    data
+    |> Enum.take(n)
+    |> Enum.sum_by(& &1.share)
+  end
+
+  # Utilities
 
   def dollarize(cents) when is_number(cents), do: cents / 100
 
