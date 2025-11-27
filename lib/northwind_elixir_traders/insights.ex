@@ -187,6 +187,45 @@ defmodule NorthwindElixirTraders.Insights do
     end
   end
 
+  def calculate_top_n_entity_by_order_value(m, n \\ 5)
+      when m in @m_tables and is_integer(n) and n >= 0 do
+    if n == 0 do
+      0
+    else
+      from(s in subquery(query_top_n_entity_by_order_revenue(m, n)),
+          select: sum(s.revenue))
+      |> Repo.one()
+    end
+  end
+
+  def query_top_n_entity_by_order_revenue(m, n \\ 5)
+      when m in @m_tables and is_integer(n) and n >= 0 do
+    from(s in subquery(query_entity_by_order_revenue(m)),
+        order_by: [desc: s.revenue], limit: ^n)
+  end
+
+  def generate_entity_share_of_revenues_xy(m) when m in @m_tables do
+    0 .. count_entity_orders(m, :with)
+    |> Task.async_stream(&{&1, calculate_top_n_entity_by_order_value(m, &1)})
+    |> Enum.to_list()
+    |> extract_task_results()
+    |> normalize_xy()
+  end
+
+  def calculate_gini_coeff(xyl) when is_list(xyl) do
+    xyl
+    |> then(&Enum.zip(&1, tl(&1)))
+    |> Enum.reduce(0.0, fn c, acc -> acc + calculate_chunk_area(c) end)
+    |> Kernel.-(0.5)
+    |> Kernel.*(2)
+  end
+
+  def gini(m) when m in @m_tables do
+    m
+    |> generate_entity_share_of_revenues_xy()
+    |> calculate_gini_coeff()
+  end
+
   def dollarize(cents) when is_number(cents), do: cents / 100
 
   # Benchmarking parallelism
