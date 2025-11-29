@@ -15,6 +15,7 @@ alias NorthwindElixirTraders.Customer
 alias NorthwindElixirTraders.Order
 alias NorthwindElixirTraders.OrderDetail
 alias NorthwindElixirTraders.Insights
+alias NorthwindElixirTraders.Joins
 
 IEx.configure(inspect: [charlists: :as_lists])
 

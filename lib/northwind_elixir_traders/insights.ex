@@ -1,6 +1,6 @@
 defmodule NorthwindElixirTraders.Insights do
   import Ecto.Query
-  alias NorthwindElixirTraders.{Repo, Product, Order, OrderDetail, Customer, Employee, Shipper, Supplier, Category}
+  alias NorthwindElixirTraders.{Repo, Product, Order, OrderDetail, Customer, Employee, Shipper, Supplier, Category, Joins}
 
   @tables [Customer, Employee, Shipper, Category, Supplier, Product, OrderDetail, Order]
   @m_tables @tables -- [Order, OrderDetail]
@@ -69,20 +69,11 @@ defmodule NorthwindElixirTraders.Insights do
       where: o.customer_id == ^customer_id, select: o)
   end
 
-  def query_top_n_customers_by_order_revenue(n \\ 5) do
-    from(s in subquery(query_customers_by_order_revenue()),
-      order_by: [desc: s.revenue], limit: ^n)
-  end
+  def query_top_n_customers_by_order_revenue(n \\ 5),
+    do: query_top_n_entity_by_order_revenue(Customer, n)
 
-  def calculate_top_n_customers_by_order_value(n \\ 5)
-        when is_integer(n) and n >= 0 do
-    if n == 0 do
-      0.0
-    else 
-      from(s in subquery(query_top_n_customers_by_order_revenue(n)),
-        select: sum(s.revenue)) |> Repo.one()
-    end
-  end
+  def calculate_top_n_customers_by_order_value(n \\ 5), 
+    do: calculate_top_n_entity_by_order_value(Customer, n)
 
   def list_customers_by_order_revenue do
     from(s in subquery(query_customers_by_order_revenue()),
@@ -104,7 +95,31 @@ defmodule NorthwindElixirTraders.Insights do
   # Copy and paste tab-separated result into Excel and create a scatter plot
   def generate_customer_share_of_revenues_xy, do: generate_entity_share_of_revenues_xy(Customer)
 
-  # Generalized queries and calculations for all modules
+  #
+  # Generalized queries and calculations 
+  #
+
+  def query_entity_by_product_quantity(m), do: Joins.p_od_group_and_select(m)
+
+  def query_entity_by_order_revenue(m), do: Joins.p_od_group_and_select(m)
+
+  def query_entity_record_totals(m), do: Joins.p_od_group_and_select(m)
+
+  def query_top_n_entity_by_order_revenue(m, n \\ 5), do: query_top_n_entity_by(m, :revenue, n)
+
+  def query_top_n_entity_by(m, field, n \\5)
+        when is_integer(n) and n >= 0 and field in [:quantity, :revenue] do
+    from(s in subquery(query_entity_record_totals(m)),
+      order_by: [desc: field(s, ^field)], limit: ^n)
+  end
+
+  def calculate_top_n_entity_by_order_value(m, n \\ 5), do: calculate_top_n_entity_by(m, :revenue, n)
+
+  def calculate_top_n_entity_by(m, field, n \\ 5) do
+    if n == 0, do: 0, else:
+      from(s in subquery(query_top_n_entity_by(m, field, n)), select: sum(field(s, ^field)))
+      |> Repo.one()
+  end
 
   def count_entity_orders(m, condition \\ :with)
       when m in @m_tables and condition in [:with, :without] do
@@ -121,65 +136,18 @@ defmodule NorthwindElixirTraders.Insights do
     end      
   end
 
-  def query_entity_by_order_revenue(m) when m in [Supplier, Category] do
-    from(x in m,
-      join: p in assoc(x, :products),
-      join: od in assoc(p, :order_details),
-      group_by: x.id,
-      select: %{id: x.id, name: x.name, revenue: sum(od.quantity * p.price)})
-  end
-
-  def query_entity_by_order_revenue(m) when m == Product do
-    from(x in m,
-      join: od in assoc(x, :order_details),
-      group_by: x.id,
-      select: %{id: x.id, name: x.name, revenue: sum(od.quantity * x.price)})
-  end
-
-  def query_entity_by_order_revenue(m) when m in @m_tables do
-    query =
-      from(x in m,
-        join: o in assoc(x, :orders),
-        join: od in assoc(o, :order_details),
-        join: p in assoc(od, :product),
-        group_by: x.id,
-        select: %{id: x.id, revenue: sum(od.quantity * p.price)})
-    if m == Employee do
-      select_merge(query, [x, o, od, p],
-        %{name: fragment("? || ' ' || ?", x.last_name, x.first_name)})
-    else
-      select_merge(query, [x, o, od, p], %{name: x.name})
-    end
-  end
-
-  def calculate_top_n_entity_by_order_value(m, n \\ 5)
-      when m in @m_tables and is_integer(n) and n >= 0 do
-    if n == 0 do
-      0
-    else
-      from(s in subquery(query_top_n_entity_by_order_revenue(m, n)),
-          select: sum(s.revenue))
-      |> Repo.one()
-    end
-  end
-
-  def query_top_n_entity_by_order_revenue(m, n \\ 5)
-      when m in @m_tables and is_integer(n) and n >= 0 do
-    from(s in subquery(query_entity_by_order_revenue(m)),
-        order_by: [desc: s.revenue], limit: ^n)
-  end
-
   # Gini Coefficient
 
-  def gini(m) when m in @m_tables do
-    m
-    |> generate_entity_share_of_revenues_xy()
+  def gini(m, field) when m in @m_tables do
+    generate_entity_share_of_xy(m, field)
     |> calculate_gini_coeff()
   end
 
-  def generate_entity_share_of_revenues_xy(m) when m in @m_tables do
+  def generate_entity_share_of_revenues_xy(m), do: generate_entity_share_of_xy(m, :revenue)
+
+  def generate_entity_share_of_xy(m, field) when m in @m_tables do
     0 .. count_entity_orders(m, :with)
-    |> Task.async_stream(&{&1, calculate_top_n_entity_by_order_value(m, &1)})
+    |> Task.async_stream(&{&1, calculate_top_n_entity_by(m, field, &1)})
     |> Enum.to_list()
     |> extract_task_results()
     |> normalize_xy()
@@ -210,24 +178,33 @@ defmodule NorthwindElixirTraders.Insights do
 
   # Calculate share of revenues of the vital few and trivial many (default to 80/20 rule)
 
-  def calculate_relative_revenue_share_of_entity_rows(m) do
-    data =  from(s in subquery(query_entity_by_order_revenue(m)),
-              order_by: [desc: s.revenue])
-            |> Repo.all()
-    total = Enum.sum_by(data, & &1.revenue)
+  def calculate_relative_revenue_share_of_entity_rows(m),
+    do: calculate_relative_share_of_entity_rows(m, :revenue)
 
-    Enum.map(data, fn %{revenue: r} = x ->
-      %{id: x.id, name: x.name, share: r / total} end)
+  def calculate_relative_share_of_entity_rows(m, field) do
+    data =  from(s in subquery(query_entity_record_totals(m)),
+              order_by: [desc: field(s, ^field)])
+            |> Repo.all()
+    total = Enum.sum_by(data, &Map.get(&1, field))
+
+    Enum.map(data, fn x ->
+      %{id: x.id, name: x.name, share: x[field] / total} end)
   end
 
-  def revenue_share_total_trivial_many(m, q \\ 0.8) do
-    calculate_relative_revenue_share_of_entity_rows(m)
+  def revenue_share_total_trivial_many(m, q \\ 0.8),
+    do: share_total_trivial_many(m, :revenue, q)
+
+  def share_total_trivial_many(m, field, q \\ 0.8) do
+    calculate_relative_share_of_entity_rows(m, field)
     |> Enum.reverse()
     |> helper_vital_trivial(m, q)
   end
 
-  def revenue_share_total_vital_few(m, q \\ 0.2) do
-    calculate_relative_revenue_share_of_entity_rows(m)
+  def revenue_share_total_vital_few(m, q \\ 0.2),
+    do: share_total_vital_few(m, :revenue, q)
+
+  def share_total_vital_few(m, field, q \\ 0.2) do
+    calculate_relative_share_of_entity_rows(m, field)
     |> helper_vital_trivial(m, q)
   end
 
@@ -243,6 +220,7 @@ defmodule NorthwindElixirTraders.Insights do
     |> Enum.sum_by(& &1.share)
   end
 
+ 
   # Utilities
 
   def dollarize(cents) when is_number(cents), do: cents / 100
