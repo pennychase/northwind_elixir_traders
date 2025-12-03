@@ -11,56 +11,58 @@ defmodule NorthwindElixirTraders.Joins do
   def get_tables(:both), do: @lhs ++ @rhs
   def get_tables(:all), do: @tables
 
-  # Base queries performing joins
+  # Base queries performing joins using named bindings
+
+  def base_from(m) when m in @lhs or m in @rhs or m == Product, do: from(x in m, as: :x)
 
   def entity_to_p_od(m) when m == Product do
-    from(x in m)
-    |> join(:inner, [x], od in assoc(x, :order_details))
+    base_from(m)
+    |> join(:inner, [x: x], od in assoc(x, :order_details), as: :od)
   end
 
   def entity_to_p_od(m) when m in @lhs do
-    from(x in m)
-    |> join(:inner, [x], p in assoc(x, :products))
-    |> join(:inner, [x, p], od in assoc(p, :order_details))
+    base_from(m)
+    |> join(:inner, [x: x], p in assoc(x, :products), as: :p)
+    |> join(:inner, [p: p], od in assoc(p, :order_details), as: :od)
   end
 
   def entity_to_p_od(m) when m in @rhs do
-    from(x in m)
-    |> join(:inner, [x], o in assoc(x, :orders))
-    |> join(:inner, [x, o], od in assoc(o, :order_details))
-    |> join(:inner, [x, o, od], p in assoc(od,:product))
+    base_from(m)
+    |> join(:inner, [x: x], o in assoc(x, :orders), as: :o)
+    |> join(:inner, [o: o], od in assoc(o, :order_details), as: :od)
+    |> join(:inner, [od: od], p in assoc(od,:product), as: :p)
   end
 
-  # Group and select functions
+  # Group and select functions using named bindings
 
   def to_p_od_and_group(m) do
     entity_to_p_od(m)
-    |> group_by([x], x.id)
+    |> group_by([x: x], x.id)
   end
 
   def p_od_group_and_select(m) when m == Product do
     to_p_od_and_group(m)
-    |> select([x, od], 
+    |> select([x: x, od: od], 
         %{id: x.id, name: x.name, quantity: sum(od.quantity), revenue: sum(x.price * od.quantity)})
   end
 
   def p_od_group_and_select(m) when m in @lhs do
     to_p_od_and_group(m)
-    |> select([x, p, od], 
+    |> select([x: x, p: p, od: od], 
         %{id: x.id, name: x.name, quantity: sum(od.quantity), revenue: sum(p.price * od.quantity)})
   end
 
   def p_od_group_and_select(m) when m in @rhs do
     to_p_od_and_group(m)
-    |> select([x, o, od, p], 
+    |> select([x: x, p: p, od: od], 
         %{id: x.id, name: x.name, quantity: sum(od.quantity), revenue: sum(p.price * od.quantity)})
     |> rhs_merge_name(m)
   end
   
   def rhs_merge_name(%Ecto.Query{} = query, m) when m == Employee,
-    do: select_merge(query, [x, o, od, p], %{name: fragment("? || ' ' || ?", x.last_name, x.first_name)})
+    do: select_merge(query, [x: x], %{name: fragment("? || ' ' || ?", x.last_name, x.first_name)})
 
   def rhs_merge_name(%Ecto.Query{} = query, m) when m in @rhs,
-    do: select_merge(query, [x, o, od, p], %{name: x.name})
+    do: select_merge(query, [x: x], %{name: x.name})
 
 end
