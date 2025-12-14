@@ -1,6 +1,6 @@
 defmodule NorthwindElixirTraders.Joins do
   import Ecto.Query
-  alias NorthwindElixirTraders.{Supplier, Category, Product, OrderDetail, Order, Employee, Shipper, Customer}
+  alias NorthwindElixirTraders.{Supplier, Category, Product, OrderDetail, Order, Employee, Shipper, Customer, Insights}
 
   @tables [Supplier, Category, Product, OrderDetail, Order, Employee, Shipper, Customer]
   @lhs Enum.slice(@tables, 0..1)
@@ -38,6 +38,11 @@ defmodule NorthwindElixirTraders.Joins do
   def to_p_od_and_group(m) do
     entity_to_p_od(m)
     |> group_by([x: x], x.id)
+  end
+
+  def p_od_group_and_select(m, opts) when is_list(opts) do
+    p_od_group_and_select(m)
+    |> Insights.filter_by_date(opts)
   end
 
   def p_od_group_and_select(m) when m == Product do
