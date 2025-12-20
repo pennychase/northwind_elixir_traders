@@ -35,14 +35,12 @@ defmodule NorthwindElixirTraders.Joins do
 
   # Group and select functions using named bindings
 
-  def to_p_od_and_group(m) do
-    entity_to_p_od(m)
-    |> group_by([x: x], x.id)
-  end
+  def to_p_od_and_group(m), do: to_p_od_and_group(m, :id)
 
-  def p_od_group_and_select(m, opts) when is_list(opts) do
-    p_od_group_and_select(m)
-    |> Insights.filter_by_date(opts)
+  def to_p_od_and_group(m, field) when is_atom(field) do
+    d_field = dynamic([x: x], field(x, ^field))
+    entity_to_p_od(m)
+    |> group_by(^d_field)
   end
 
   def p_od_group_and_select(m) when m == Product do
@@ -62,6 +60,23 @@ defmodule NorthwindElixirTraders.Joins do
     |> select([x: x, p: p, od: od], 
         %{id: x.id, name: x.name, quantity: sum(od.quantity), revenue: sum(p.price * od.quantity)})
     |> rhs_merge_name(m)
+  end
+
+  def p_od_group_and_select(m, opts) when is_list(opts) do
+    p_od_group_and_select(m)
+    |> Insights.filter_by_date(opts)
+  end
+
+  def p_od_group_and_select(m, field) when m == Customer and field == :country do
+    to_p_od_and_group(m, field)
+    |> select([x: x, od: od, p: p], 
+        %{id: x.id, country: x.country, quantity: sum(od.quantity), revenue: sum(p.price * od.quantity)})
+  end
+
+  def p_od_group_and_select(m, field, opts)
+      when is_list(opts) and m == Customer and field == :country do
+    p_od_group_and_select(m, field)
+    |> Insights.filter_by_date(opts)
   end
   
   def rhs_merge_name(%Ecto.Query{} = query, m) when m == Employee,
