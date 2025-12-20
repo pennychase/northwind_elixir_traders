@@ -209,7 +209,7 @@ defmodule NorthwindElixirTraders.Insights do
   end
 
   def helper_vital_trivial(data, m, q)
-      when is_list(data) and m in @m_tables and is_number(q) and q >0 and q <= 1 do
+      when is_list(data) and m in @m_tables and is_number(q) and q > 0 and q <= 1 do
     n =
       m
       |> count_entity_orders(:with)
@@ -309,6 +309,29 @@ defmodule NorthwindElixirTraders.Insights do
             
   end
 
+  def by_employee_by_product(eid, pid, opts) when is_list(opts),
+    do: by_employee_by_product(eid, pid) |> filter_by_date(opts)
+
+  def by_employee_by_product(eid, pid) do
+    from(p in Product, as: :p)
+    |> join(:inner, [p: p], od in assoc(p, :order_details), as: :od)
+    |> join(:inner, [od: od], o in assoc(od, :order), as: :o)
+    |> join(:inner, [o: o], e in assoc(o, :employee), as: :e)
+    |> where([p: p, e: e], p.id == ^pid and e.id == ^eid)
+    |> select([p: p, e: e, od: od], %{product: p.name, employee: e.last_name,
+        quantity: sum(od.quantity), revenue: sum(p.price * od.quantity)})
+  end
+
+  def by_employee_by_product_all do
+    for eid <- Repo.all(from(e in Employee, select: e.id)) do
+      for pid <- Repo.all(from(p in Product, select: p.id)) do
+        Repo.one(by_employee_by_product(eid, pid))
+      end
+    end
+    |> List.flatten()
+    |> Enum.reject(&is_nil(Map.values(&1) |> Enum.uniq |> hd))
+  end
+
   # Utilities
 
   def dollarize(cents) when is_number(cents), do: cents / 100
@@ -331,6 +354,18 @@ defmodule NorthwindElixirTraders.Insights do
     |> Kernel./(reps)
   end
 
+  def benchmark(query = %Ecto.Query{}, kind \\ :all, reps \\ 1_000) 
+      when kind in [:all, :one] and is_integer(reps) do
+    rf = 
+      case kind do
+        :all -> fn x -> Repo.all(x) end
+        :one -> fn x -> Repo.one(x) end
+      end
 
+    1..reps
+    |> Enum.map(fn _ -> :timer.tc(fn -> rf.(query) end) end)
+    |> Enum.sum_by(&elem(&1, 0))
+    |> Kernel./(reps)
+  end
 
 end
