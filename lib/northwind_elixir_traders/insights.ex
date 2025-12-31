@@ -72,7 +72,7 @@ defmodule NorthwindElixirTraders.Insights do
   def query_top_n_customers_by_order_revenue(n \\ 5),
     do: query_top_n_entity_by_order_revenue(Customer, n)
 
-  def calculate_top_n_customers_by_order_value(n \\ 5), 
+  def calculate_top_n_customers_by_order_value(n \\ 5),
     do: calculate_top_n_entity_by_order_value(Customer, n)
 
   def list_customers_by_order_revenue do
@@ -90,13 +90,13 @@ defmodule NorthwindElixirTraders.Insights do
   def count_customers_orders(condition \\ :with), do: count_entity_orders(Customer, condition)
 
   # Can use to plot share of customers vs share of revenue:
-  #   Insights.generate_customer_share_of_revenues_xy 
+  #   Insights.generate_customer_share_of_revenues_xy
   #   |> Enum.each(fn {n, r} -> IO.puts("#{n}\t#{r}") end)
   # Copy and paste tab-separated result into Excel and create a scatter plot
   def generate_customer_share_of_revenues_xy, do: generate_entity_share_of_revenues_xy(Customer)
 
   #
-  # Generalized queries and calculations 
+  # Generalized queries and calculations
   #
 
   def query_entity_by_product_quantity(m), do: Joins.p_od_group_and_select(m)
@@ -133,7 +133,7 @@ defmodule NorthwindElixirTraders.Insights do
     case condition do
       :with -> count_with
       :without -> Repo.aggregate(m, :count) - count_with
-    end      
+    end
   end
 
   # Gini Coefficient
@@ -154,7 +154,7 @@ defmodule NorthwindElixirTraders.Insights do
   end
 
   def normalize_xy(xyl) when is_list(xyl) do
-    {mxn, mxr} = 
+    {mxn, mxr} =
       xyl |> Enum.reduce({0, 0}, fn {n, r}, {mxn, mxr} -> {max(n, mxn), max(r, mxr)} end)
 
     xyl
@@ -229,7 +229,7 @@ defmodule NorthwindElixirTraders.Insights do
 
   def filter_by_date(query = %Ecto.Query{}, start: s = %Date{}, field: field)
       when field in [:date, :birth_date] do
-    s = if field == :date, do: to_utc_datetime!(s, :start), else: s  
+    s = if field == :date, do: to_utc_datetime!(s, :start), else: s
 
     w = case field do
         :date -> dynamic([o: o], field(o, ^field) >= ^s)
@@ -270,15 +270,15 @@ defmodule NorthwindElixirTraders.Insights do
   end
 
   def timespan_number_of_months({y_mn, m_mn} = _yn_mn, {y_mx, m_mx} = _ym_mx)
-      when is_integer(y_mn) and is_integer(y_mx) and y_mx >= y_mn and 
+      when is_integer(y_mn) and is_integer(y_mx) and y_mx >= y_mn and
           m_mn in 1..12 and m_mx in 1..12 do
     (y_mx - y_mn) * 12 + m_mx - m_mn + 1
   end
 
   def timespan_earliest_latest({y_mn, m_mn} = _ym_mn, {y_mx, m_mx} = _ym_mx)
-      when is_integer(y_mn) and is_integer(y_mx) and y_mx >= y_mn and 
+      when is_integer(y_mn) and is_integer(y_mx) and y_mx >= y_mn and
           m_mn in 1..12 and m_mx in 1..12 do
-    [earliest, latest] = 
+    [earliest, latest] =
       from(o in Order, select: [min(o.date), max(o.date)])
       |> Repo.one()
       |> Enum.map(&DateTime.to_date/1)
@@ -293,7 +293,7 @@ defmodule NorthwindElixirTraders.Insights do
   end
 
   def timespan_ym_to_opts_list({y_mn, m_mn} = _ym_mn, {y_mx, m_mx} = _ym_mx)
-      when is_integer(y_mn) and is_integer(y_mx) and y_mx >= y_mn and 
+      when is_integer(y_mn) and is_integer(y_mx) and y_mx >= y_mn and
           m_mn in 1..12 and m_mx in 1..12 do
 
     {{y_early, m_early}, {y_late, m_late}} = timespan_earliest_latest({y_mn, m_mn}, {y_mx, m_mx})
@@ -306,7 +306,7 @@ defmodule NorthwindElixirTraders.Insights do
       if {next.year, next.month} <= {y_late, m_late},
         do: {:cont, [ym_to_dates(next.year, next.month) | acc]}, else: {:halt, acc}
     end)
-            
+
   end
 
   def by_employee_by_product(eid, pid, opts) when is_list(opts),
@@ -332,6 +332,19 @@ defmodule NorthwindElixirTraders.Insights do
     |> Enum.reject(&is_nil(Map.values(&1) |> Enum.uniq |> hd))
   end
 
+# Dynamic Querieswith Window Functions
+
+  def query_entity_window_dynamic(m, xm, agg \\ :sum, metric \\ :revenue, partition_by \\ :id)
+      when m  in @m_tables and
+              is_atom(xm) and agg in [:sum, :min, :max, :avg, :count] and is_atom(metric) and
+              is_atom(partition_by) do
+    q = Joins.entity_to_p_od(m) |> distinct(true)
+    case agg do
+      :sum -> select(q, [x: x, p: p, od: od], {field(x, ^xm),
+      over(sum(od.quantity * p.price), partition_by: field(x, ^partition_by))})
+    end
+  end
+
   # Utilities
 
   def dollarize(cents) when is_number(cents), do: cents / 100
@@ -347,16 +360,16 @@ defmodule NorthwindElixirTraders.Insights do
   # x_rel = Enum.map(x, fn {mc, t} -> {mc, t / Enum.max(Keyword.values(x)) |> Float.round(3)} end)
 
   def parallel_benchmark(mc, reps, orders) do
-    :timer.tc(fn -> 
+    :timer.tc(fn ->
       Enum.map(1..1000, fn _ -> calculate_total_value_of_orders(orders, max_concurrency: mc) end)
     end)
     |> elem(0)
     |> Kernel./(reps)
   end
 
-  def benchmark(query = %Ecto.Query{}, kind \\ :all, reps \\ 1_000) 
+  def benchmark(query = %Ecto.Query{}, kind \\ :all, reps \\ 1_000)
       when kind in [:all, :one] and is_integer(reps) do
-    rf = 
+    rf =
       case kind do
         :all -> fn x -> Repo.all(x) end
         :one -> fn x -> Repo.one(x) end
