@@ -85,4 +85,31 @@ defmodule NorthwindElixirTraders.Joins do
   def rhs_merge_name(%Ecto.Query{} = query, m) when m in @rhs,
     do: select_merge(query, [x: x], %{name: x.name})
 
+  # Query building functions
+
+  # Convert schema module name to the field name
+  def module_to_assoc_field(m) when m in @tables, do:
+    Module.split(m)
+    |> List.last()
+    |> String.downcase()
+    |> String.to_atom()
+
+  # Functions to traverse ERD in RTL and LTR order, using named bindings
+
+  def xy(xm, ym) when xm in @lhs and ym in @rhs, do:
+    from(x in xm, as: :x)
+      |> join(:inner, [x: x], p in assoc(x, :products), as: :p)
+      |> join(:inner, [p: p], od in assoc(p, :order_details), as: :od)
+      |> join(:inner, [od: od], o in assoc(od, :order), as: :o)
+      |> join(:inner, [o: o], y in assoc(o, ^module_to_assoc_field(ym)), as: :y)
+
+  def xy(xm, ym) when  xm in @rhs and ym in @lhs, do:
+    from(x in xm, as: :x)
+      |> join(:inner, [x: x], o in assoc(x, :orders), as: :o)
+      |> join(:inner, [o: o], od in assoc(o, :order_details), as: :od)
+      |> join(:inner, [od: od], p in assoc(od, :product), as: :p)
+      |> join(:inner, [p: p], y in assoc(p, ^module_to_assoc_field(ym)), as: :y)
+
+
+
 end
