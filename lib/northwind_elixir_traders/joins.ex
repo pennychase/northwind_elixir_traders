@@ -1,6 +1,6 @@
 defmodule NorthwindElixirTraders.Joins do
   import Ecto.Query
-  alias NorthwindElixirTraders.{Supplier, Category, Product, OrderDetail, Order, Employee, Shipper, Customer, Insights}
+  alias NorthwindElixirTraders.{Supplier, Category, Product, OrderDetail, Order, Employee, Shipper, Customer, Insights, Repo}
 
   @tables [Supplier, Category, Product, OrderDetail, Order, Employee, Shipper, Customer]
   @lhs Enum.slice(@tables, 0..1)
@@ -18,12 +18,14 @@ defmodule NorthwindElixirTraders.Joins do
   def entity_to_p_od(m) when m == Product do
     base_from(m)
     |> join(:inner, [x: x], od in assoc(x, :order_details), as: :od)
+    |> join(:inner, [od: od], o in assoc(od, :order), as: :o)
   end
 
   def entity_to_p_od(m) when m in @lhs do
     base_from(m)
     |> join(:inner, [x: x], p in assoc(x, :products), as: :p)
     |> join(:inner, [p: p], od in assoc(p, :order_details), as: :od)
+    |> join(:inner, [od: od], o in assoc(od, :order), as: :o)
   end
 
   def entity_to_p_od(m) when m in @rhs do
@@ -97,19 +99,116 @@ defmodule NorthwindElixirTraders.Joins do
   # Functions to traverse ERD in RTL and LTR order, using named bindings
 
   def xy(xm, ym) when xm in @lhs and ym in @rhs, do:
+    join_lhs_to_od(xm) 
+    |> join_od_to_order() 
+    |> join_rhs_to_order(ym)
+
+  def xy(xm, ym) when  xm in @rhs and ym in @lhs, do:
+    join_rhs_to_od(xm) 
+    |> join_od_to_product() 
+    |> join_lhs_to_product(ym)
+
+  def xy(Product, Order), do:
+    from(od in OrderDetail, as: :od)
+    |> join_od_to_product()
+    |> join_od_to_order()
+
+  def xy(Order, Product), do: xy(Product, Order)
+
+  def xy(xm, Order) when xm in @lhs, do:
+    xm
+    |> join_lhs_to_od()
+    |> join_od_to_order()
+
+  def xy(xm, Product) when xm in @rhs, do:
+    xm
+    |> join_rhs_to_od()
+    |> join_od_to_product()
+
+  def xy(Product, ym) when ym in @lhs, do:
+    xy(Product, Order)
+    |> join_lhs_to_product(ym)
+
+  def xy(Order, ym) when ym in @rhs, do:
+    xy(Order, Product)
+    |> join_rhs_to_order(ym)
+
+  def xy(xm, Product) when xm in @lhs, do:
+    xm
+    |> join_lhs_to_od()
+    |> join_od_to_order()
+
+  def xy(xm, Order) when xm in @rhs, do:
+    xm
+    |> join_rhs_to_od()
+    |> join_od_to_product()
+
+  def xy(Product, ym) when ym in @rhs, do:
+    xy(Product, Order)
+    |> join_rhs_to_order(ym)
+
+  def xy(Order, ym) when ym in @lhs, do:
+    xy(Order, Product)
+    |> join_lhs_to_product(ym)
+
+  def xy(xm, ym) when xm in @lhs and xm != ym, do:
+    xm
+    |> join_lhs_to_od()
+    |> join_od_to_order()
+    |> join_lhs_to_product(ym)
+
+  def xy(xm, ym) when xm in @rhs and xm != ym, do:
+    xm
+    |> join_rhs_to_od()
+    |> join_od_to_product()
+    |> join_rhs_to_order(ym)
+
+  def join_od_to_product(query = %Ecto.Query{}),
+    do: join(query, :inner, [od: od], p in assoc(od, :product), as: :p)
+
+  def join_od_to_order(query = %Ecto.Query{}),
+    do: join(query, :inner, [od: od], o in assoc(od, :order), as: :o)
+
+  def join_lhs_to_product(query = %Ecto.Query{}, ym) when ym in @lhs,
+    do: join(query, :inner, [p: p], y in assoc(p, ^module_to_assoc_field(ym)), as: :y)
+
+  def join_rhs_to_order(query = %Ecto.Query{}, ym) when ym in @rhs,
+    do: join(query, :inner, [o: o], y in assoc(o, ^module_to_assoc_field(ym)), as: :y)
+
+  def join_lhs_to_od(xm) when xm in @lhs, do:
     from(x in xm, as: :x)
       |> join(:inner, [x: x], p in assoc(x, :products), as: :p)
       |> join(:inner, [p: p], od in assoc(p, :order_details), as: :od)
-      |> join(:inner, [od: od], o in assoc(od, :order), as: :o)
-      |> join(:inner, [o: o], y in assoc(o, ^module_to_assoc_field(ym)), as: :y)
 
-  def xy(xm, ym) when  xm in @rhs and ym in @lhs, do:
+  def join_rhs_to_od(xm) when xm in @rhs, do:
     from(x in xm, as: :x)
       |> join(:inner, [x: x], o in assoc(x, :orders), as: :o)
       |> join(:inner, [o: o], od in assoc(o, :order_details), as: :od)
-      |> join(:inner, [od: od], p in assoc(od, :product), as: :p)
-      |> join(:inner, [p: p], y in assoc(p, ^module_to_assoc_field(ym)), as: :y)
 
 
+  # Testing combinations between modules
+
+  def gen_combinations() do
+    for lhs <- @tables do
+      for rhs <- @tables do
+        if lhs != OrderDetail and rhs != OrderDetail and rhs != lhs do
+          [{lhs, rhs}, {rhs, lhs}]
+        end
+      end
+    end
+    |> List.flatten() |> Enum.reject(&is_nil/1)
+  end
+
+  def calc_total_revenues({xm, ym}), do:
+    xy(xm, ym)
+    |> select([p: p, od: od], sum(p.price * od.quantity))
+    |> Repo.one()
+
+  def verify_total_revenues_of_xy(combs) do
+    correct = 38642423
+    combs
+    |> Enum.map(&calc_total_revenues/1)
+    |> Enum.reject(&(&1 != {correct, correct}))
+  end
 
 end
