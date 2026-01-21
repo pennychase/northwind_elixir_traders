@@ -29,6 +29,7 @@ defmodule NorthwindElixirTraders.Joins do
     base_from(m)
     |> join(:inner, [o: o], od in assoc(o, :order_details), as: :od)
     |> join(:inner, [od: od], p in assoc(od, :product), as: :p)
+    |> join(:inner, [o: o], c in assoc(o, :customer), as: :c)
   end
 
   def entity_to_p_od(m) when m in @lhs do
@@ -49,9 +50,11 @@ defmodule NorthwindElixirTraders.Joins do
 
   def to_p_od_and_group(m), do: to_p_od_and_group(m, :id)
 
-  def to_p_od_and_group(m, field) when is_atom(field) do
+  def to_p_od_and_group(m, field) 
+      when (m in @lhs or m in @rhs or m in [Product, Order]) and is_atom(field) do
     d_field = case m do
       Product -> dynamic([p: p], field(p, ^field))
+      Order -> dynamic([o: o], field(o, ^field))
       _ -> dynamic([x: x], field(x, ^field))
     end
     entity_to_p_od(m)
@@ -68,7 +71,7 @@ defmodule NorthwindElixirTraders.Joins do
     to_p_od_and_group(m, field)
     |> select([x: x], %{id: x.id})
     |> merge_quantity_revenue()
-    |> merge_name(m, field)
+    |> merge_name(field)
   end
 
   def p_od_group_and_select(m, opts) when is_list(opts) do
@@ -76,14 +79,14 @@ defmodule NorthwindElixirTraders.Joins do
     |> Insights.filter_by_date(opts)
   end
 
-  def p_od_group_and_select(m) when m in @lhs or m in @rhs or m == Product do
+  def p_od_group_and_select(m) when m in @lhs or m in @rhs or m in [Product, Order] do
     q = to_p_od_and_group(m)
     case {has_named_binding?(q, :x), has_named_binding?(q, :p)} do
       {true, true} -> select(q, [x: x], %{id: x.id})
       {false, true} -> select(q, [p: p], %{id: p.id})
     end
     |> merge_quantity_revenue()
-    |> merge_name(m)
+    |> merge_name()
   end
 
   def merge_quantity_revenue(%Ecto.Query{} = query) do
@@ -102,6 +105,25 @@ defmodule NorthwindElixirTraders.Joins do
 
   def merge_name(%Ecto.Query{} = query, m) when m == Product,
     do: select_merge(query, [p: p], %{name: p.name})
+
+  def merge_name(%Ecto.Query{} = query, m) when m == Order do
+    d_frag = case Ecto.Adapter.lookup_meta(Repo)[:adapter] do
+      Ecto.Adapters.SQLite3 -> 
+        dynamic([o: o, c: c], fragment("strftime('%Y-%m-%d', ?) || ' - ' || ?", o.date, c.name))
+
+      Ecto.Adapters.Postgres ->
+        dynamic([o: o, c: c], fragment("to_char(?, 'YYYY-MM-DD') || ' - ' || ?", o.date, c.name))
+
+      _ -> dynamic([o: o, c: c], fragment("? || ' - ' || ?", o.date, c.name))
+      end
+
+      select_merge(query, [o: o, c: c], ^%{name: d_frag})
+  end
+
+  def merge_name(%Ecto.Query{from: %{source: {_table, m}}} = query, field) when is_atom(field),
+    do: merge_name(query, m, field)
+
+  def merge_name(%Ecto.Query{from: %{source: {_table, m}}} = query), do: merge_name(query, m)
 
   # Query building functions
 
