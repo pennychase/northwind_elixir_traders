@@ -1,9 +1,12 @@
 defmodule NorthwindElixirTraders.Insights do
   import Ecto.Query
+
   alias NorthwindElixirTraders.{Repo, Product, Order, OrderDetail, Customer, Employee, Shipper, Supplier, Category, Joins}
 
-  @tables [Customer, Employee, Shipper, Category, Supplier, Product, OrderDetail, Order]
+  @tables [Supplier, Category, Product, OrderDetail, Order, Employee, Shipper, Customer]
   @m_tables @tables -- [Order, OrderDetail]
+  @lhs Enum.slice(@tables, 0..1)
+  @rhs Enum.slice(@tables, -3..-1)
 
   @max_concurrency System.schedulers_online()
   @timeout 10_000
@@ -334,20 +337,43 @@ defmodule NorthwindElixirTraders.Insights do
 
 # Dynamic Querieswith Window Functions
 
-  def query_entity_window_dynamic(m, xm, agg \\ :sum, metric \\ :revenue, partition_by \\ :id)
-      when m  in @m_tables and
-              is_atom(xm) and agg in [:sum, :min, :max, :avg, :count] and is_atom(metric) and
-              is_atom(partition_by) do
-    q = Joins.entity_to_p_od(m) |> distinct(true)
+  def query_entity_window_dynamic(m, xm, opts \\ [])
+      when (m in @lhs or m in @rhs) and is_atom(xm) and is_list(opts) do
+    agg = Keyword.get(opts, :agg, :sum)
+    metric = Keyword.get(opts, :metric, :revenue)
+    partition_by = Keyword.get(opts, :partition_by, :id)
+    order = Keyword.get(opts, :order, :desc)
+    limit = Keyword.get(opts, :limit)
+
+    q = Joins.xy(m, Product) |> distinct(true)
 
     d_xm = dynamic([x: x], field(x, ^xm))
     d_pb = dynamic([x: x], field(x, ^partition_by))
-    d_sum = dynamic([x: x, p: p, od: od], 
-              sum(od.quantity * p.price) |> over(:part))
+    d_agg = dynamic_agg(agg, metric)
 
+    q = from(q, select: ^%{x: d_xm, agg: d_agg}, 
+      windows: [part: [partition_by: ^d_pb]], order_by: ^[{order, d_agg}])
+
+    if is_integer(limit) and limit > 0, do: limit(q, ^limit), else: q
+  end
+
+  def dynamic_agg(agg, :revenue) when agg in [:sum, :min, :max, :avg, :count] do
     case agg do
-      :sum -> from(q, select: ^%{x: d_xm, agg: d_sum},
-                windows: [part: [partition_by: ^d_pb]]) 
+      :sum -> dynamic([od: od, p: p], sum(od.quantity * p.price) |> over(:part))
+      :min -> dynamic([od: od, p: p], min(od.quantity * p.price) |> over(:part))
+      :avg -> dynamic([od: od, p: p], avg(od.quantity * p.price) |> over(:part))
+      :max -> dynamic([od: od, p: p], max(od.quantity * p.price) |> over(:part))
+      :count -> raise ArgumentError, ":count is not supported for the :revenue metric"
+    end
+  end
+
+  def dynamic_agg(agg, :quantity) when agg in [:sum, :min, :max, :avg, :count] do
+    case agg do
+      :sum -> dynamic([od: od], sum(od.quantity) |> over(:part))
+      :min -> dynamic([od: od], min(od.quantity) |> over(:part))
+      :avg -> dynamic([od: od], avg(od.quantity) |> over(:part))
+      :max -> dynamic([od: od], max(od.quantity) |> over(:part))
+      :count -> dynamic([od: od], count(od.quantity) |> over(:part))
     end
   end
  
