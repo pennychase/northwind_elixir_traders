@@ -335,7 +335,7 @@ defmodule NorthwindElixirTraders.Insights do
     |> Enum.reject(&is_nil(Map.values(&1) |> Enum.uniq |> hd))
   end
 
-# Dynamic Querieswith Window Functions
+# Dynamic Queries with Window Functions
 
   def query_entity_window_dynamic(m, xm, opts \\ [])
       when (m in @lhs or m in @rhs) and is_atom(xm) and is_list(opts) do
@@ -375,6 +375,20 @@ defmodule NorthwindElixirTraders.Insights do
       :max -> dynamic([od: od], max(od.quantity) |> over(:part))
       :count -> dynamic([od: od], count(od.quantity) |> over(:part))
     end
+  end
+
+  # Running Totals using Windows
+
+  def revenues_running_total(opts) when is_list(opts),
+    do: revenues_running_total() |> filter_by_date(opts)
+
+  def revenues_running_total() do
+    Joins.xy(Order, Product)
+    |> order_by([o: o], asc: o.date)
+    |> windows([od: od], w: [order_by: [asc: od.id]])
+    |> select([o: o, od: od, p: p],
+        %{date: o.date, order_id: o.id, od_id: od.id,
+          agg: sum(od.quantity * p.price) |> over(:w)})
   end
  
   # Utilities
