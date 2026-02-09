@@ -390,6 +390,29 @@ defmodule NorthwindElixirTraders.Insights do
         %{date: o.date, order_id: o.id, od_id: od.id,
           agg: sum(od.quantity * p.price) |> over(:w)})
   end
+
+  def revenues_running_total_per_customer() do
+    Joins.xy(Customer, Product)
+    |> windows([x: x, o: o], part: [partition_by: x.id, order_by: [asc: o.date]])
+    |> select([x: x, o: o, od: od, p: p], 
+        %{ x_id: x.id, x: x.name, date: o.date, order_id: o.id, 
+           agg: sum(od.quantity * p.price) |> over(:part)
+        })
+        |> distinct(true)
+  end
+
+  def disagg_rows_by_field(rows, field) when is_list(rows) and is_atom(field) do
+    Enum.reduce(rows, %{}, fn r, acc -> 
+      Map.update(acc, r[field], [Map.delete(r, field)], &[Map.delete(r, field) | &1]) end)
+    |> Enum.map(fn {field_key, disagg_rows} -> {field_key, Enum.reverse(disagg_rows)} end)
+    |> Map.new()
+  end
+
+  def calculate_sum_of_max_running_totals(disaggregated) when is_map(disaggregated) do
+    disaggregated
+    |> Enum.map(fn {_k, rows} -> Enum.sort_by(rows, & &1.agg, :desc) |> hd end)
+    |> Enum.sum_by(& &1.agg)
+  end
  
   # Utilities
 
