@@ -391,6 +391,7 @@ defmodule NorthwindElixirTraders.Insights do
           agg: sum(od.quantity * p.price) |> over(:w)})
   end
 
+  # Customer specific running totals
   def revenues_running_total_per_customer() do
     Joins.xy(Customer, Product)
     |> windows([x: x, o: o], part: [partition_by: x.id, order_by: [asc: o.date]])
@@ -401,7 +402,7 @@ defmodule NorthwindElixirTraders.Insights do
         |> distinct(true)
   end
 
-  def disagg_rows_by_field(rows, field) when is_list(rows) and is_atom(field) do
+  def disagg_rows_by_field(rows, field \\ :name) when is_list(rows) and is_atom(field) do
     Enum.reduce(rows, %{}, fn r, acc -> 
       Map.update(acc, r[field], [Map.delete(r, field)], &[Map.delete(r, field) | &1]) end)
     |> Enum.map(fn {field_key, disagg_rows} -> {field_key, Enum.reverse(disagg_rows)} end)
@@ -413,6 +414,40 @@ defmodule NorthwindElixirTraders.Insights do
     |> Enum.map(fn {_k, rows} -> Enum.sort_by(rows, & &1.agg, :desc) |> hd end)
     |> Enum.sum_by(& &1.agg)
   end
+
+  def window_expanding_by_order_date(%Ecto.Query{from: %{source: {_table, m}}} = query, opts \\ [])
+       when m in @m_tables and is_list(opts) do
+    order = Keyword.get(opts, :order, :asc)
+    case m do
+      Product -> windows(query, [p: p, o: o], 
+        part: [partition_by: p.id, order_by: [{^order, field(o, :date)}]])
+      _ -> windows(query, [x: x, o: o], 
+        part: [partition_by: x.id, order_by: [{^order, field(o, :date)}]])
+    end
+  end
+
+  # Generalized running aggregate
+  def running(m, opts \\ []) when (m in @lhs or m in @rhs or m == Product) and is_list(opts) do
+    agg = Keyword.get(opts, :agg, :sum)
+    metric = Keyword.get(opts, :metric, :revenue)
+    order = Keyword.get(opts, :order, :asc)
+    date_opts = fetch_date_filter_opts(opts)
+
+    Joins.xy(m, Order)
+    |> window_expanding_by_order_date(order: order)
+    |> Joins.merge_id() |> Joins.merge_order_id() |> Joins.merge_name()
+    |> Joins.merge_agg(agg, metric) |> distinct(true) |> filter_by_date(date_opts)
+  end
+
+  def fetch_date_filter_opts(opts \\ []) when is_list(opts) do
+    Enum.reduce([:year, :month, :start, :end], [], fn k, acc ->
+      v = Keyword.get(opts, k)
+      if !is_nil(v), do: Keyword.put(acc, k, v), else: acc
+    end)
+    |> Keyword.put(:field, :date)
+    |> Enum.reverse()
+  end
+
  
   # Utilities
 

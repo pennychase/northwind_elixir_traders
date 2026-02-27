@@ -69,7 +69,7 @@ defmodule NorthwindElixirTraders.Joins do
 
   def p_od_group_and_select(m, field) when m == Customer and field == :country do
     to_p_od_and_group(m, field)
-    |> select([x: x], %{id: x.id})
+    |> merge_id()
     |> merge_quantity_revenue()
     |> merge_name(field)
   end
@@ -80,14 +80,24 @@ defmodule NorthwindElixirTraders.Joins do
   end
 
   def p_od_group_and_select(m) when m in @lhs or m in @rhs or m in [Product, Order] do
-    q = to_p_od_and_group(m)
-    case {has_named_binding?(q, :x), has_named_binding?(q, :p)} do
-      {true, true} -> select(q, [x: x], %{id: x.id})
-      {false, true} -> select(q, [p: p], %{id: p.id})
-    end
+    to_p_od_and_group(m)
+    |> merge_id()
     |> merge_quantity_revenue()
     |> merge_name()
   end
+
+  def merge_id(%Ecto.Query{from: %{source: {_table, m}}} = query) 
+      when m in @rhs or m in @lhs or m in [Product, Order] do
+    case m do
+      Product -> select(query, [p: p], %{id: p.id})
+      Order -> select(query, [o: o], %{id: o.id})
+      _ -> select(query, [x: x], %{id: x.id})
+    end
+  end
+
+  def merge_order_id(%Ecto.Query{from: %{source: {_table, m}}} = query)
+      when m in @rhs or m in @lhs or m == Product,
+    do: select_merge(query, [o: o], %{order_id: o.id})
 
   def merge_quantity_revenue(%Ecto.Query{} = query) do
     select_merge(query, [p: p, od: od], 
@@ -125,6 +135,11 @@ defmodule NorthwindElixirTraders.Joins do
 
   def merge_name(%Ecto.Query{from: %{source: {_table, m}}} = query), do: merge_name(query, m)
 
+  def merge_agg(%Ecto.Query{} = query, agg, metric)
+      when agg in [:sum, :min, :max, :avg, :count] and metric in [:revenue, :quantity] do
+    select_merge(query, [p: p, od: od], ^%{agg: Insights.dynamic_agg(agg, metric)})
+  end
+
   # Query building functions
 
   # Convert schema module name to the field name
@@ -147,11 +162,14 @@ defmodule NorthwindElixirTraders.Joins do
     |> join_lhs_to_product(ym)
 
   def xy(Product, Order), do:
-    from(od in OrderDetail, as: :od)
-    |> join_od_to_product()
+    from(p in Product, as: :p)
+    |> join_product_to_od()
     |> join_od_to_order()
 
-  def xy(Order, Product), do: xy(Product, Order)
+  def xy(Order, Product), do: 
+    from(o in Order, as: :o)
+    |> join_order_to_od()
+    |> join_od_to_product()
 
   def xy(xm, Order) when xm in @lhs, do:
     xm
@@ -206,6 +224,12 @@ defmodule NorthwindElixirTraders.Joins do
 
   def join_od_to_order(query = %Ecto.Query{}),
     do: join(query, :inner, [od: od], o in assoc(od, :order), as: :o)
+
+  def join_product_to_od(query = %Ecto.Query{}),
+    do: join(query, :inner, [p: p], od in assoc(p, :order_details), as: :od)
+
+   def join_order_to_od(query = %Ecto.Query{}),
+    do: join(query, :inner, [o: o], od in assoc(o, :order_details), as: :od)
 
   def join_lhs_to_product(query = %Ecto.Query{}, ym) when ym in @lhs,
     do: join(query, :inner, [p: p], y in assoc(p, ^module_to_assoc_field(ym)), as: :y)
